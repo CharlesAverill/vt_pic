@@ -1,0 +1,4 @@
+-R ../Picinae Picinae
+-R src Lifted
+
+src/min_ex_lifted.v
