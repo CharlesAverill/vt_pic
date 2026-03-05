@@ -4,9 +4,9 @@ Some examples of [Picinae](https://github.com/CharlesAverill/Picinae) proofs for
 
 ## Progress
 
-| Challenge | Version | Progress |
+| Challenge | Version | Verification |
 | --- | --- | --- |
-| [Minimum Excludant](https://verifythis.github.io/onsite/archive/2025/challenges/verifyThis2025-Challenge-1.pdf) | [Naive](./theories/min_ex_proofs.v) | Security and Correctness &check; |
+| [Minimum Excludant](https://verifythis.github.io/onsite/archive/2025/challenges/verifyThis2025-Challenge-1.pdf) | [Naive](./src/min_ex.c) | [Security and Correctness](./theories/min_ex_proofs.v) |
 | | Boolean Marks | |
 | | Mutated Array | |
 | | Sorted Array | |
