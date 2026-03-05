@@ -18,10 +18,21 @@ Open Scope N.
 
 Definition mex_correct (s : store) (arr : addr) (n : N) : Prop :=
   (* RAX is not present in the array *)
-  (forall i, i < n -> scast 32 64 (s V_MEM64 Ⓓ[arr + i ⊗ 4]) <> s R_RAX) /\
+  (forall i,
+    i < n ->
+    (* This clause only applies when the minimum excludant is smaller than the array size.
+       Consider the cause where RAX = n.
+       By the pigeonhole principle, if n is returned, it *must* be because all values [0, n-1]
+       are present in the array. This is specified in clause 2. *)
+    s R_RAX < n ->
+    scast 32 64 (s V_MEM64 Ⓓ[arr + i ⊗ 4]) <> s R_RAX) /\
   (* All non-negative integers smaller than RAX are in the array *)
   (forall x, x < s R_RAX ->
     exists i, i < n /\ scast 32 64 (s V_MEM64 Ⓓ[arr + i ⊗ 4]) = x).
+
+(* A minimum excludant routine is safe if it preserves memory *)
+Definition mex_safe (s0 s : store) : Prop :=
+  s0 V_MEM64 = s V_MEM64.
 
 (* Naive Implementation *)
 Lemma mex0_welltyped : welltyped_prog x64typctx min_ex_so_mex0_amd64.
@@ -41,11 +52,20 @@ Section Mex0Invariants.
   Definition mex0_invs (t:trace) :=
     match t with (Addr a,s)::_ => match a with
     (* Entrypoint *)
-    | 0x101120 => Some (models x64typctx s0 /\ s R_RDI = arr /\ s R_RSI = n)
+    | 0x101120 => Some (
+      models x64typctx s0 /\
+      s R_RDI = arr /\
+      s R_RSI = n /\
+      4 * n < 2^64 /\
+      mex_safe s0 s
+    )
     (* Outer invariant *)
     | 0x101130 => Some (
       models x64typctx s0 /\
-      s R_RDI = arr /\ s R_RSI = n /\
+      s R_RDI = arr /\
+      s R_RSI = n /\
+      4 * n < 2^64 /\
+      mex_safe s0 s /\
       v s < n /\
       (* All non-negative integers less than v are present in the array *)
       forall x, x < v s ->
@@ -54,8 +74,12 @@ Section Mex0Invariants.
     (* Inner invariant *)
     | 0x101140 => Some (
       models x64typctx s0 /\
-      s R_RDI = arr /\ s R_RSI = n /\
-      i s <= v s < n /\
+      s R_RDI = arr /\
+      s R_RSI = n /\
+      4 * n < 2^64 /\
+      mex_safe s0 s /\
+      i s < n /\
+      v s < n /\
       (* All non-negative integers less than v are present in the array *)
       (forall x, x < v s ->
         exists j, j < n /\ scast 32 64 (s V_MEM64 Ⓓ[arr + j ⊗ 4]) = x) /\
@@ -63,13 +87,13 @@ Section Mex0Invariants.
       forall j, j < i s -> scast 32 64 (s V_MEM64 Ⓓ[arr + j ⊗ 4]) <> v s
     )
     (* Postcondition *)
-    | 0x101155 | 0x101171 => Some (mex_correct s arr n)
+    | 0x101155 | 0x101171 => Some (mex_correct s arr n /\ mex_safe s0 s)
     | _ => None
     end | _ => None end.
 End Mex0Invariants.
 
 Create HintDb mex0hints.
-Hint Unfold mem arr n v i : mex0hints.
+Hint Unfold mem arr n v i mex_correct mex_safe : mex0hints.
 
 Local Ltac step := time x64_step; autounfold with mex0hints.
 
@@ -81,9 +105,9 @@ Definition mex0_exit (t:trace) :=
 
 Theorem mex0_partial_correctness:
   forall s t s' x'
-         (ENTRY: startof t (x',s') = (Addr 0x101120, s))
-         (MDL: models x64typctx s)
-         (RSI32: s R_RSI = s R_RSI mod 2^32),
+    (ENTRY: startof t (x',s') = (Addr 0x101120, s))
+    (MDL: models x64typctx s)
+    (LEN: 4 * n s < 2^64),
   satisfies_all min_ex_so_mex0_amd64 (mex0_invs s) mex0_exit ((x',s')::t).
 Proof.
   intros. apply prove_invs.
@@ -100,11 +124,11 @@ Proof.
   destruct_inv 64 PRE.
 
   (* Entry -> Outer loop *)
-  destruct PRE as (MDL0 & RDI & RSI). {
+  destruct PRE as (MDL0 & RDI & RSI & LEN & Safety). {
     repeat step.
     (* Postcondition: length = 0 *) {
-      apply N.eqb_eq in BC. rewrite BC, N.lxor_nilpotent.
-      split. lia.
+      apply N.eqb_eq in BC. rewrite BC, N.lxor_nilpotent. psimpl.
+      split; [|assumption]. split. lia.
       change (scast _ _ _ mod _) with 0. lia.
     } (* Outer invariant *) {
       psimpl. rewrite N.lxor_nilpotent.
@@ -115,72 +139,87 @@ Proof.
   }
 
   (* Outer loop -> Inner loop *)
-  destruct PRE as (MDL0 & RDI & RSI & NPos & OuterInv). {
+  destruct PRE as (MDL0 & RDI & RSI & LEN & Safety & NPos & OuterInv). {
     repeat step. psimpl.
     repeat (split; [easy|]).
     rewrite N.lxor_nilpotent.
-    change (scast _ _ _ mod _) with 0. split.
-    split. lia. assumption. split.
-      now apply OuterInv.
+    change (scast _ _ _ mod _) with 0.
+    unfold v, n in *. split. lia. split. lia.
+    split. now apply OuterInv.
     lia.
   }
 
   (* Inner loop -> Inner loop *)
-  destruct PRE as (MDL0 & RDI & RSI & NPos & OuterInv & InnerInv).
+  destruct PRE as (MDL0 & RDI & RSI & LEN & Safety & IN & VN & OuterInv & InnerInv).
   repeat step.
 
   (* Break out of inner+outer loop, postcondition *) {
     apply N.eqb_eq in BC, BC0.
     rewrite N.mod_small in BC by apply ofZ_bound.
-    split.
+    split. split.
       intros. apply InnerInv. now unfold i; rewrite <- BC0.
     intros. now apply OuterInv.
+    now psimpl.
   }
 
-  (* Postcondition *) {
-    apply N.eqb_eq in BC, BC1.
+  (* No suitable element found, return n *) {
+    apply N.eqb_eq in BC, BC1. psimpl.
     rewrite N.mod_small in BC by apply ofZ_bound.
+    split; [|assumption].
+    unfold v, i, n in *. rewrite <- BC1. psimpl.
+    rewrite msub_nowrap in BC1 by (psimpl; lia).
+    psimpl in BC1. rewrite <- BC1 in *. clear BC1.
     split.
-      intros. unfold v, i, n in *. rewrite <- BC1. psimpl.
-      rewrite msub_nowrap in BC1 by (psimpl; lia).
-      psimpl in BC1. rewrite <- BC1 in *. clear BC1.
-      admit.
-    intros. rewrite <- BC1 in *. psimpl in H. apply OuterInv. unfold v. rewrite <- BC1.
-    admit.
+      intros. lia.
+    intros. assert (x < s0 R_RSI - 1 \/ x = s0 R_RSI - 1) by lia. destruct H0.
+      now apply OuterInv.
+      exists (s R_RAX). split. lia. rewrite getmem_mod_l in BC. now rewrite BC.
   }
 
   (* Break out of inner loop, hit outer invariant *) {
-    psimpl. repeat (split; [easy|]). unfold v, n, i in NPos.
+    psimpl. repeat (split; [easy|]). unfold v, n, i in *.
     apply N.eqb_neq in BC0, BC1. apply N.eqb_eq in BC.
     rewrite N.mod_small. rewrite msub_nowrap in BC1. psimpl in BC1.
     split. lia.
     intros. destruct (N.eq_dec x (s R_RCX)). subst.
       exists (s R_RAX). split. lia.
       unfold scast in *. rewrite mod_pow2_ofZ in BC by reflexivity.
-      now rewrite getmem_mod_l in BC.
+      rewrite getmem_mod_l in BC. apply BC.
       apply OuterInv. unfold v, n in *. lia.
     psimpl. lia.
     enough (s0 R_RSI < 2^64). lia.
     pose proof (models_var R_RSI MDL0). now simpl in H.
   }
 
-  (* Postcondition *) {
-    apply N.eqb_eq in BC0.
+  (* v is absent from the array, return v *) {
+    psimpl. apply N.eqb_eq in BC0.
+    split; [|assumption]. unfold v, i, n in *.
+    rewrite msub_nowrap in BC0 by (psimpl; lia). psimpl in BC0.
     split.
-      intros. apply InnerInv. unfold i in *.
-      rewrite msub_nowrap in BC0. psimpl in BC0. rewrite <- BC0.
-      admit.
-      psimpl. lia.
-    intros. now apply OuterInv.
+      intros. assert (i0 < s R_RAX \/ i0 = s R_RAX) by lia. destruct H1.
+        now apply InnerInv.
+        subst. unfold scast in *. rewrite mod_pow2_ofZ in BC by reflexivity.
+        rewrite getmem_mod_l in BC.
+        now apply N.eqb_neq.
+    auto.
   }
 
   (* Loop around, hit inner invariant again *) {
-    psimpl. unfold i in InnerInv. unfold v in OuterInv.
-    repeat (split; [easy|]). unfold i, v, n in *.
+    psimpl. unfold v, i, n in *.
+    repeat (split; [easy|]).
     split.
-      rewrite N.mod_small. admit. admit.
+      apply N.eqb_neq in BC0.
+      rewrite msub_nowrap in BC0. psimpl in BC0.
+      rewrite N.mod_small by lia. lia.
+      pose proof (models_var R_RSI MDL1). simpl in H. psimpl. lia.
+    split. assumption.
     split.
       intros. now apply OuterInv.
-    intros. apply InnerInv. admit.
+    intros. rewrite N.mod_small in H.
+    assert (j < s R_RAX \/ j = s R_RAX) by lia. destruct H0.
+      now apply InnerInv.
+      subst. rewrite getmem_mod_l in BC. unfold scast in BC.
+      rewrite mod_pow2_ofZ in BC by reflexivity. now apply N.eqb_neq in BC.
+    pose proof (models_var R_RSI MDL0). simpl in H0. lia.
   }
-Admitted.
+Qed.

@@ -6,7 +6,7 @@ Some examples of [Picinae](https://github.com/CharlesAverill/Picinae) proofs for
 
 | Challenge | Version | Progress |
 | --- | --- | --- |
-| [Minimum Excludant](https://verifythis.github.io/onsite/archive/2025/challenges/verifyThis2025-Challenge-1.pdf) | [Naive](./theories/min_ex_proofs.v) | In Progress |
+| [Minimum Excludant](https://verifythis.github.io/onsite/archive/2025/challenges/verifyThis2025-Challenge-1.pdf) | [Naive](./theories/min_ex_proofs.v) | Security and Correctness &check; |
 | | Boolean Marks | |
 | | Mutated Array | |
 | | Sorted Array | |
