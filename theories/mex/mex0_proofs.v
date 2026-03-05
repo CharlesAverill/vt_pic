@@ -1,4 +1,4 @@
-(* Proofs for the mex0 from the Minimum Excludant challenge
+(* Proofs for mex0 from the Minimum Excludant challenge
 
   https://verifythis.github.io/onsite/archive/2025/challenges/verifyThis2025-Challenge-1.pdf
 *)
@@ -23,7 +23,7 @@ Section Mex0Invariants.
   Definition mex0_invs (t:trace) :=
     match t with (Addr a,s)::_ => match a with
     (* Entrypoint *)
-    | 0x101120 => Some (
+    | 0x101140 => Some (
       models x64typctx s0 /\
       s R_RDI = arr /\
       s R_RSI = n /\
@@ -31,7 +31,7 @@ Section Mex0Invariants.
       mex_safe s0 s
     )
     (* Outer invariant *)
-    | 0x101130 => Some (
+    | 0x101150 => Some (
       models x64typctx s0 /\
       s R_RDI = arr /\
       s R_RSI = n /\
@@ -43,7 +43,7 @@ Section Mex0Invariants.
         exists j, j < n /\ scast 32 64 (s V_MEM64 Ⓓ[arr + j ⊗ 4]) = x
     )
     (* Inner invariant *)
-    | 0x101140 => Some (
+    | 0x101160 => Some (
       models x64typctx s0 /\
       s R_RDI = arr /\
       s R_RSI = n /\
@@ -58,7 +58,7 @@ Section Mex0Invariants.
       forall j, j < i s -> scast 32 64 (s V_MEM64 Ⓓ[arr + j ⊗ 4]) <> v s
     )
     (* Postcondition *)
-    | 0x101155 | 0x101171 => Some (mex_correct s arr n /\ mex_safe s0 s)
+    | 0x101175 | 0x101191 => Some (mex_correct s arr n /\ mex_safe s0 s)
     | _ => None
     end | _ => None end.
 End Mex0Invariants.
@@ -70,13 +70,13 @@ Local Ltac step := time x64_step; autounfold with mex0hints.
 
 Definition mex0_exit (t:trace) :=
   match t with (Addr a,s)::_ => match a with
-  | 0x101155 | 0x101171 => true
+  | 0x101175 | 0x101191 => true
   | _ => false
   end | _ => false end.
 
 Theorem mex0_partial_correctness:
   forall s t s' x'
-    (ENTRY: startof t (x',s') = (Addr 0x101120, s))
+    (ENTRY: startof t (x',s') = (Addr 0x101140, s))
     (MDL: models x64typctx s)
     (LEN: 4 * n s < 2^64),
   satisfies_all min_ex_so_mex0_amd64 (mex0_invs s) mex0_exit ((x',s')::t).

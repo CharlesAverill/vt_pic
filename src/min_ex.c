@@ -28,18 +28,20 @@ ulong mex0(int* arr, ulong n) {
 }
 
 // Boolean Marks
-unsigned int mex1(int* arr, unsigned int n) {
+ulong mex1(int* arr, ulong n) {
     bool *seen = malloc(sizeof(bool) * n);
 
-    for(int i = 0; i < n; i++) {
+    for(ulong i = 0; i < n; i++) {
         int x = arr[i];
-        if (0 <= x && x <= n)
+        if (0 <= x && x < n)
             seen[x] = true;
     }
 
-    int r = 0;
+    ulong r = 0;
     while(r < n && seen[r])
         r++;
+
+    free(seen);
 
     return r;
 }
