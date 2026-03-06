@@ -57,7 +57,7 @@ Section Mex1Invariants.
     | malloc_exit => Post 0 (
         models x64typctx s0 /\
         s R_RBX = arr /\
-        s R_RDI = n /\
+        s R_RBP = n /\
         4 * n < 2^64 /\
         mex_safe s0 s
     )
@@ -199,9 +199,9 @@ Proof.
     (* Length <> 0, go to first loop *) {
       repeat step. psimpl.
       repeat (split; [easy|]).
-      exists 0. psimpl. split. rewrite <- RDI'.
-      unfold arr in RBX. psimpl in RBX.
-      unfold arr, arr' in ARR. psimpl in ARR. rewrite ARR.
+      exists 0. psimpl. unfold arr, n in *. psimpl in RBX.
+      rewrite <- RDI', <- RBX, <- RDI in *.
+      split.
       
 
   

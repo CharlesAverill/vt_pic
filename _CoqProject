@@ -2,5 +2,7 @@
 -R src Lifted
 -Q theories VtPic
 
-src/min_ex_lifted.v
-theories/mex/mex_spec.v
+src/min_ex/min_ex_lifted.v
+theories/min_ex/mex_spec.v
+
+src/max/max_lifted.v
